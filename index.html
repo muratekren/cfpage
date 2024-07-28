@@ -1,16 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<link rel="stylesheet" href=1.css>	
-<link href='https://fonts.googleapis.com/css?family=Comfortaa' rel='stylesheet' type='text/css'>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click Animation</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #282c34;
+            color: #61dafb;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .animation {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(97, 218, 251, 0.7);
+            pointer-events: none;
+            transform: scale(0);
+            animation: scaleUp 0.6s forwards;
+        }
+        @keyframes scaleUp {
+            to {
+                transform: scale(5);
+                opacity: 0;
+            }
+        }
+    </style>
 </head>
-  <body>
-<canvas id="canvas"></canvas>
-<h1>
-<center>
-  	enjoy life<br><br>
-  	have fun
-</center>
-</h1>
-  </body>
+<body>
+    <h1>Click anywhere on the screen!</h1>
+    <script>
+        document.addEventListener('click', function(e) {
+            const x = e.clientX;
+            const y = e.clientY;
+            const animation = document.createElement('div');
+            animation.className = 'animation';
+            animation.style.width = '50px';
+            animation.style.height = '50px';
+            animation.style.left = `${x - 25}px`;
+            animation.style.top = `${y - 25}px`;
+            document.body.appendChild(animation);
+            setTimeout(() => animation.remove(), 600); // Remove the element after animation ends
+        });
+    </script>
+</body>
 </html>
