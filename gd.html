@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Geometry Dash Clone + Level Editor with Textures</title>
+<style>
+  body, html { margin:0; padding:0; background:#001122; color:#eee; font-family:sans-serif; }
+  #game, #editor {
+    border:1px solid #333;
+    background: linear-gradient(to bottom, #001122, #003355);
+    display: block;
+    margin: 10px auto;
+  }
+  #toolbar {
+    text-align:center;
+    margin: 10px;
+  }
+  button {
+    margin: 0 5px;
+    padding: 5px 10px;
+    font-size: 14px;
+  }
+  #levelData {
+    display: block;
+    width: 90%;
+    height: 100px;
+    margin: 10px auto;
+    background: #112233;
+    color: #eee;
+    font-family: monospace;
+    padding: 5px;
+    border: none;
+    resize: none;
+  }
+</style>
+</head>
+<body>
+
+<h2 style="text-align:center;">Geometry Dash Clone + Level Editor with Textures</h2>
+
+<canvas id="game" width="800" height="150"></canvas>
+<canvas id="editor" width="800" height="150"></canvas>
+
+<div id="toolbar">
+  <button id="btnEdit">Edit Level</button>
+  <button id="btnPlay">Play Level</button>
+  <button id="btnAddObstacle">Add Obstacle</button>
+  <button id="btnAddCoin">Add Coin</button>
+  <button id="btnAddPortal">Add Portal</button>
+  <button id="btnSave">Save Level</button>
+  <button id="btnLoad">Load Level</button>
+  <button id="btnClear">Clear Level</button>
+</div>
+
+<textarea id="levelData" placeholder="Level JSON data here..."></textarea>
+
+<script>
+// Canvas and context
+const gameCanvas = document.getElementById('game');
+const gameCtx = gameCanvas.getContext('2d');
+
+const editorCanvas = document.getElementById('editor');
+const editorCtx = editorCanvas.getContext('2d');
+
+const width = gameCanvas.width;
+const height = gameCanvas.height;
+
+// Colors fallback
+const obstacleColor = '#f00';
+const coinColor = '#ff0';
+const portalColor = '#0ff';
+
+// Level data
+let level = {
+  obstacles: [],
+  coins: [],
+  portals: []
+};
+
+// Player
+const player = {
+  x: 50,
+  y: height - 40 - 20,
+  width: 40,
+  height: 40,
+  velocityY: 0,
+  gravity: 0.8,
+  jumpPower: -15,
+  onGround: false
+};
+
+let editing = true;
+let selectedObject = null;
+let dragging = false;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+let coinCount = 0;
+let gameSpeed = 6;
+
+const coinSound = new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg');
+
+// Preload images (example textures)
+const imgPlayer = new Image();
+imgPlayer.src = "https://i.imgur.com/ntKlTjF.png"; // cube texture
+
+const imgObstacle = new Image();
+imgObstacle.src = "https://i.imgur.com/2PL9heF.png"; // obstacle texture
+
+const imgCoin = new Image();
+imgCoin.src = "https://i.imgur.com/H5xW4aC.png"; // coin image
+
+const imgPortal = new Image();
+imgPortal.src = "https://i.imgur.com/9jV9Wpn.png"; // portal image
+
+// Helper function to check rectangle overlap
+function rectsOverlap(a, b) {
+  return !(b.x > a.x + a.width ||
+           b.x + b.width < a.x ||
+           b.y > a.y + a.height ||
+           b.y + b.height < a.y);
+}
+
+// Draw functions with textures fallback to colors
+function drawObstacle(ctx, o) {
+  if(imgObstacle.complete) {
+    ctx.drawImage(imgObstacle, o.x, o.y, o.width, o.height);
+  } else {
+    ctx.fillStyle = obstacleColor;
+    ctx.fillRect(o.x, o.y, o.width, o.height);
+  }
+}
+function drawCoin(ctx, c) {
+  if(imgCoin.complete) {
+    ctx.drawImage(imgCoin, c.x, c.y, c.size, c.size);
+  } else {
+    ctx.fillStyle = coinColor;
+    ctx.beginPath();
+    ctx.arc(c.x + c.size/2, c.y + c.size/2, c.size/2, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+function drawPortal(ctx, p) {
+  if(imgPortal.complete) {
+    ctx.drawImage(imgPortal, p.x, p.y, p.width, p.height);
+  } else {
+    ctx.fillStyle = portalColor;
+    ctx.fillRect(p.x, p.y, p.width, p.height);
+  }
+}
+function drawPlayer(ctx) {
+  if(imgPlayer.complete) {
+    ctx.drawImage(imgPlayer, player.x, player.y, player.width, player.height);
+  } else {
+    ctx.fillStyle = '#0ff';
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+  }
+}
+
+// Draw editor level
+function drawEditor() {
+  editorCtx.clearRect(0, 0, width, height);
+  // Ground line
+  editorCtx.strokeStyle = '#555';
+  editorCtx.beginPath();
+  editorCtx.moveTo(0, height - 20);
+  editorCtx.lineTo(width, height - 20);
+  editorCtx.stroke();
+
+  level.obstacles.forEach(o => {
+    drawObstacle(editorCtx, o);
+    if (o === selectedObject) {
+      editorCtx.strokeStyle = '#0ff';
+      editorCtx.lineWidth = 3;
+      editorCtx.strokeRect(o.x, o.y, o.width, o.height);
+      editorCtx.lineWidth = 1;
+    }
+  });
+  level.coins.forEach(c => {
+    drawCoin(editorCtx, c);
+    if (c === selectedObject) {
+      editorCtx.strokeStyle = '#0ff';
+      editorCtx.lineWidth = 3;
+      editorCtx.beginPath();
+      editorCtx.arc(c.x + c.size/2, c.y + c.size/2, c.size/2 + 3, 0, Math.PI * 2);
+      editorCtx.stroke();
+      editorCtx.lineWidth = 1;
+    }
+  });
+  level.portals.forEach(p => {
+    drawPortal(editorCtx, p);
+    if (p === selectedObject) {
+      editorCtx.strokeStyle = '#0ff';
+      editorCtx.lineWidth = 3;
+      editorCtx.strokeRect(p.x, p.y, p.width, p.height);
+      editorCtx.lineWidth = 1;
+    }
+  });
+}
+
+// Draw game level and player
+function drawGame() {
+  gameCtx.clearRect(0, 0, width, height);
+  // Ground line
+  gameCtx.strokeStyle = '#555';
+  gameCtx.beginPath();
+  gameCtx.moveTo(0, height - 20);
+  gameCtx.lineTo(width, height - 20);
+  gameCtx.stroke();
+
+  level.obstacles.forEach(drawObstacle.bind(null, gameCtx));
+  level.coins.forEach(drawCoin.bind(null, gameCtx));
+  level.portals.forEach(drawPortal.bind(null, gameCtx));
+
+  drawPlayer(gameCtx);
+
+  gameCtx.fillStyle = '#fff';
+  gameCtx.font = '20px Arial';
+  gameCtx.fillText('Coins: ' + coinCount, 10, 25);
+}
+
+// Add objects
+function addObstacle() {
+  level.obstacles.push({x: 200, y: height - 60, width: 40, height: 40});
+  drawEditor();
+}
+function addCoin() {
+  level.coins.push({x: 200, y: height - 100, size: 20});
+  drawEditor();
+}
+function addPortal() {
+  level.portals.push({x: 200, y: height - 100, width: 30, height: 80, mode: 'ship'});
+  drawEditor();
+}
+
+// Mouse events for editor canvas
+editorCanvas.addEventListener('mousedown', e => {
+  if (!editing) return;
+  const rect = editorCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  selectedObject = null;
+
+  for (let list of [level.portals, level.coins, level.obstacles]) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const obj = list[i];
+      if (obj.width) {
+        if (mx >= obj.x && mx <= obj.x + obj.width && my >= obj.y && my <= obj.y + obj.height) {
+          selectedObject = obj;
+          dragging = true;
+          dragOffsetX = mx - obj.x;
+          dragOffsetY = my - obj.y;
+          break;
+        }
+      } else if (obj.size) {
+        const cx = obj.x + obj.size/2;
+        const cy = obj.y + obj.size/2;
+        const dist = Math.hypot(mx - cx, my - cy);
+        if (dist <= obj.size/2) {
+          selectedObject = obj;
+          dragging = true;
+          dragOffsetX = mx - obj.x;
+          dragOffsetY = my - obj.y;
+          break;
+        }
+      }
+    }
+    if (selectedObject) break;
+  }
+  drawEditor();
+});
+editorCanvas.addEventListener('mousemove', e => {
+  if (!editing || !dragging || !selectedObject) return;
+  const rect = editorCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  selectedObject.x = mx - dragOffsetX;
+  selectedObject.y = my - dragOffsetY;
+
+  if (selectedObject.width) {
+    selectedObject.x = Math.min(Math.max(0, selectedObject.x), width - selectedObject.width);
+    selectedObject.y = Math.min(Math.max(0, selectedObject.y), height - selectedObject.height);
+  } else if (selectedObject.size) {
+    selectedObject.x = Math.min(Math.max(0, selectedObject.x), width - selectedObject.size);
+    selectedObject.y = Math.min(Math.max(0, selectedObject.y), height - selectedObject.size);
+  }
+  drawEditor();
+});
+editorCanvas.addEventListener('mouseup', e => {
+  dragging = false;
+});
+editorCanvas.addEventListener('mouseleave', e => {
+  dragging = false;
+});
+
+// Buttons
+document.getElementById('btnAddObstacle').onclick = addObstacle;
+document.getElementById('btnAddCoin').onclick = addCoin;
+document.getElementById('btnAddPortal').onclick = addPortal;
+
+document.getElementById('btnEdit').onclick = () => {
+  editing = true;
+  selectedObject = null;
+  drawEditor();
+};
+document.getElementById('btnPlay').onclick = () => {
+  editing = false;
+  resetGame();
+  requestAnimationFrame(gameLoop);
+};
+
+document.getElementById('btnSave').onclick = () => {
+  document.getElementById('levelData').value = JSON.stringify(level, null, 2);
+};
+document.getElementById('btnLoad').onclick = () => {
+  try {
+    const json = document.getElementById('levelData').value;
+    const data = JSON.parse(json);
+    if(data.obstacles && data.coins && data.portals){
+      level = data;
+      drawEditor();
+    } else {
+      alert('Invalid level data!');
+    }
+  } catch {
+    alert('Invalid JSON!');
+  }
+};
+document.getElementById('btnClear').onclick = () => {
+  level = {obstacles:[], coins:[], portals:[]};
+  selectedObject = null;
+  drawEditor();
+};
+
+// Game logic
+function resetGame() {
+  player.x = 50;
+  player.y = height - player.height - 20;
+  player.velocityY = 0;
+  player.onGround = false;
+  coinCount = 0;
+  drawGame();
+  if(!editing) requestAnimationFrame(gameLoop);
+}
+
+function gameLoop() {
+  if(editing) return;
+
+  level.obstacles.forEach(o => o.x -= gameSpeed);
+  level.coins.forEach(c => c.x -= gameSpeed);
+  level.portals.forEach(p => p.x -= gameSpeed);
+
+  player.velocityY += player.gravity;
+  player.y += player.velocityY;
+  if(player.y + player.height >= height - 20){
+    player.y = height - player.height - 20;
+    player.velocityY = 0;
+    player.onGround = true;
+  } else {
+    player.onGround = false;
+  }
+
+  for(let o of level.obstacles){
+    if(rectsOverlap(player, o)){
+      alert('Game Over! Coins: ' + coinCount);
+      resetGame();
+      return;
+    }
+  }
+
+  for(let c of level.coins){
+    if(!c.collected){
+      let dist = Math.hypot(player.x + player.width/2 - (c.x + c.size/2), player.y + player.height/2 - (c.y + c.size/2));
+      if(dist < (player.width/2 + c.size/2)){
+        c.collected = true;
+        coinCount++;
+        coinSound.currentTime = 0;
+        coinSound.play();
+      }
+    }
+  }
+
+  level.coins = level.coins.filter(c => !c.collected && c.x + c.size > 0);
+  level.obstacles = level.obstacles.filter(o => o.x + o.width > 0);
+  level.portals = level.portals.filter(p => p.x + p.width > 0);
+
+  drawGame();
+  requestAnimationFrame(gameLoop);
+}
+
+window.addEventListener('keydown', e => {
+  if(!editing && e.code === 'Space' && player.onGround){
+    player.velocityY = player.jumpPower;
+  }
+});
+
+// Start in editor mode
+drawEditor();
+resetGame();
+
+</script>
+
+</body>
+</html>
