@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>River Raid Clone - 8-Bit</title>
+    <style>
+        body { background: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; color: white; font-family: 'Courier New', Courier, monospace; }
+        canvas { border: 4px solid #000; background: #0055ff; image-rendering: pixelated; }
+        .ui { position: absolute; top: 10px; width: 400px; display: flex; justify-content: space-between; font-size: 20px; }
+    </style>
+</head>
+<body>
+    <div class="ui">
+        <div id="score">SCORE: 0000</div>
+        <div id="fuel">FUEL: 100</div>
+    </div>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const fuelEl = document.getElementById('fuel');
+
+// Game Constants
+const PLAYER_SPEED = 4;
+const SCROLL_SPEED = 2;
+const BULLET_SPEED = 7;
+
+let gameActive = true;
+let score = 0;
+let fuel = 100;
+
+// Game Objects
+const player = { x: 200, y: 500, w: 20, h: 20, color: '#ffff00' };
+let bullets = [];
+let enemies = [];
+let fuelCans = [];
+let riverBanks = [];
+
+// Input handling
+const keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+function spawnEnemy() {
+    if (Math.random() < 0.02) {
+        enemies.push({ x: Math.random() * 300 + 50, y: -20, w: 25, h: 15, color: '#ff0000' });
+    }
+    if (Math.random() < 0.01) {
+        fuelCans.push({ x: Math.random() * 300 + 50, y: -20, w: 15, h: 25, color: '#00ff00' });
+    }
+}
+
+function update() {
+    if (!gameActive) return;
+
+    // Move Player
+    if (keys['ArrowLeft'] && player.x > 50) player.x -= PLAYER_SPEED;
+    if (keys['ArrowRight'] && player.x < 330) player.x += PLAYER_SPEED;
+    if (keys['Space']) {
+        if (bullets.length < 3) {
+            bullets.push({ x: player.x + 8, y: player.y, w: 4, h: 10 });
+        }
+    }
+
+    // Fuel Logic
+    fuel -= 0.05;
+    if (fuel <= 0) gameOver();
+
+    // Update Bullets
+    bullets.forEach((b, i) => {
+        b.y -= BULLET_SPEED;
+        if (b.y < 0) bullets.splice(i, 1);
+    });
+
+    // Update Enemies
+    enemies.forEach((en, i) => {
+        en.y += SCROLL_SPEED;
+        if (en.y > 600) enemies.splice(i, 1);
+
+        // Bullet Collision
+        bullets.forEach((b, bi) => {
+            if (b.x < en.x + en.w && b.x + b.w > en.x && b.y < en.y + en.h && b.y + b.h > en.y) {
+                enemies.splice(i, 1);
+                bullets.splice(bi, 1);
+                score += 30;
+            }
+        });
+
+        // Player Collision
+        if (player.x < en.x + en.w && player.x + player.w > en.x && player.y < en.y + en.h && player.y + player.h > en.y) {
+            gameOver();
+        }
+    });
+
+    // Update Fuel Cans
+    fuelCans.forEach((f, i) => {
+        f.y += SCROLL_SPEED;
+        if (player.x < f.x + f.w && player.x + player.w > f.x && player.y < f.y + f.h && player.y + f.h > f.y) {
+            fuel = Math.min(100, fuel + 20);
+            fuelCans.splice(i, 1);
+        }
+    });
+
+    scoreEl.innerText = `SCORE: ${Math.floor(score)}`;
+    fuelEl.innerText = `FUEL: ${Math.floor(fuel)}`;
+    
+    spawnEnemy();
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw River Banks (Simple Green Borders)
+    ctx.fillStyle = '#228b22';
+    ctx.fillRect(0, 0, 50, 600);
+    ctx.fillRect(350, 0, 50, 600);
+
+    // Draw Player
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+
+    // Draw Bullets
+    ctx.fillStyle = 'white';
+    bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+
+    // Draw Enemies
+    enemies.forEach(en => {
+        ctx.fillStyle = en.color;
+        ctx.fillRect(en.x, en.y, en.w, en.h);
+    });
+
+    // Draw Fuel
+    fuelCans.forEach(f => {
+        ctx.fillStyle = f.color;
+        ctx.fillRect(f.x, f.y, f.w, f.h);
+    });
+
+    if (!gameActive) {
+        ctx.fillStyle = "white";
+        ctx.font = "30px Courier New";
+        ctx.fillText("GAME OVER", 120, 300);
+    }
+}
+
+function gameOver() {
+    gameActive = false;
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
